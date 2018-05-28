@@ -1,17 +1,16 @@
 package hu.vdx.supervisor
 
-import akka.actor.Actor
+import cats.effect.IO
 import com.typesafe.scalalogging.Logger
 
-// Todo: use cats-effect for async IO
-class Runner(cs: CameraStream) extends Actor {
-  private[this] val logger = Logger(s"runner-${cs.name}")
+object Runner {
+  def apply(recorder: StreamRecorder)(cb: (Long, Process) => Unit): IO[Unit] =
+    IO({
+      val logger = Logger("runner-" + recorder.name)
 
-  override def receive: Receive = {
-    case Start =>
       logger.info("run process")
-      val (pid, process, output) = cs.run
-      sender() ! Running(pid, process)
+      val (pid, process, output) = recorder.record
+      cb(pid, process)
       logger.info("wait for termination ({})", pid)
       process.waitFor()
 
@@ -19,7 +18,5 @@ class Runner(cs: CameraStream) extends Actor {
         logger.info("delete empty file")
         output.file.delete()
       }
-
-      sender() ! Stopped
-  }
+    })
 }

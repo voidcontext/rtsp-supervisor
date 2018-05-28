@@ -2,9 +2,9 @@ package hu.vdx.supervisor
 
 import java.time.format.DateTimeFormatter
 
-case class CameraStream(ip: String, name: String, config: Config) {
+case class StreamRecorder(ip: String, name: String, config: Config) {
 
-  def run: (Long, Process, StreamOutput) = {
+  def record: (Long, Process, StreamOutput) = {
     // format: off
     val opts = Seq(
       "-D", "5",

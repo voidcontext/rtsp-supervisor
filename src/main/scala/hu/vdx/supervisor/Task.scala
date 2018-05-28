@@ -1,30 +1,43 @@
 package hu.vdx.supervisor
 
-import akka.actor.{Actor, Props}
+import akka.actor.Actor
+import cats.effect.IO
 import com.typesafe.scalalogging.Logger
-import sys.process._
 
-class Task(cs: CameraStream) extends Actor {
+import scala.concurrent.ExecutionContext
+import scala.sys.process._
 
-  private[this] val logger = Logger(s"task-${cs.name}")
+class Task(recorder: StreamRecorder, ec: ExecutionContext) extends Actor {
 
-  private[this] val runner = context.actorOf(Props(new Runner(cs)), "runner-" + cs.name)
+  private[this] val logger = Logger(s"task-${recorder.name}")
 
-  override def preStart(): Unit =
+  private[this] def runner() =
+    Runner(recorder) { (pid, process) =>
+      self ! Running(pid, process)
+    }
+
+  override def preStart(): Unit = {
     super.preStart()
-  logger.info("Starting preStart sequence.")
-  self ! Start
+    logger.info("Starting preStart sequence.")
+    self ! Start
+  }
 
-  override def postRestart(reason: Throwable): Unit =
+  override def postRestart(reason: Throwable): Unit = {
     super.postRestart(reason)
-  logger.info("Starting postRestart sequence.")
-  self ! Start
+    logger.info("Starting postRestart sequence.")
+    self ! Start
+  }
 
   def idle(): Receive = {
     case Start =>
       logger.info("Start message received.")
       context.become(waiting())
-      runner ! Start
+
+      IO.shift(ec)
+        .flatMap(_ => runner())
+        .map(_ => self ! Stopped)
+        .start
+        .unsafeRunSync()
   }
 
   def waiting(): Receive = {
@@ -56,6 +69,6 @@ class Task(cs: CameraStream) extends Actor {
 
   private[this] def terminatePid(pid: Long) = {
     logger.info("Terminating pid {}", pid)
-    s"kill -HUP $pid" !
+    s"kill -HUP $pid".!
   }
 }
